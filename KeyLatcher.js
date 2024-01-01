@@ -1,4 +1,7 @@
 var latchedNotes = {};
+var delayedOffEvents = []; // Array to hold delayed NoteOff events
+var releaseDelay = 20; // Delay in milliseconds for releasing the note
+
 var noteNames = [
     "C0", "C#0", "D0", "D#0", "E0", "F0", "F#0", "G0", "G#0", "A0", "A#0", "B0",
     "C1", "C#1", "D1", "D#1", "E1", "F1", "F#1", "G1", "G#1", "A1", "A#1", "B1",
@@ -24,12 +27,9 @@ var PluginParameters = [
         type: "menu",
         valueStrings: noteNames,
         defaultValue: 59 // Default to B2
-    },
-    {
-        name: "Panic",
-        type: "momentary"
     }
 ];
+
 
 function HandleMIDI(event) {
     var lowKey = GetParameter("Low Key");
@@ -47,35 +47,41 @@ function HandleMIDI(event) {
 }
 
 function toggleLatch(event) {
+    if (!latchedNotes[event.pitch]) {
+        releaseAllLatchedNotesWithDelay();
+    }
+
     if (latchedNotes[event.pitch]) {
         delete latchedNotes[event.pitch];
         event.send();
-        traceLatchedKeys(); // Trace current state after unlatching a key
     } else {
         latchedNotes[event.pitch] = true;
         event.send();
-        traceLatchedKeys(); // Trace current state after latching a new key
     }
+
+    traceLatchedKeys();
 }
 
-function ProcessMIDI() {
-    var panic = GetParameter("Panic");
-
-    if (panic === 1) {
-        releaseAllLatchedNotes();
-    }
-}
-
-function releaseAllLatchedNotes() {
+function releaseAllLatchedNotesWithDelay() {
     for (var pitch in latchedNotes) {
         if (latchedNotes.hasOwnProperty(pitch)) {
             var noteOff = new NoteOff();
             noteOff.pitch = parseInt(pitch);
-            noteOff.send();
-
+            delayedOffEvents.push({event: noteOff, delay: releaseDelay});
         }
     }
     latchedNotes = {};
+}
+
+function ProcessMIDI() {
+    delayedOffEvents.forEach(function (delayedEvent, index) {
+        if (delayedEvent.delay <= 0) {
+            delayedEvent.event.send();
+            delayedOffEvents.splice(index, 1);
+        } else {
+            delayedEvent.delay -= 1; // Decrease the delay count
+        }
+    });
 }
 
 function Reset() {
@@ -83,8 +89,8 @@ function Reset() {
 }
 
 function traceLatchedKeys() {
-    var latchedKeysString = Object.keys(latchedNotes).map(function(pitch) {
-        return noteNames[pitch]; // Convert pitch number to note name
+    var latchedKeysString = Object.keys(latchedNotes).map(function (pitch) {
+        return noteNames[pitch];
     }).join(", ");
     Trace("Latched Keys: " + latchedKeysString);
 }
