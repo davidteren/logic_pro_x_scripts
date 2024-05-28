@@ -30,7 +30,6 @@ var PluginParameters = [
     }
 ];
 
-
 function HandleMIDI(event) {
     var lowKey = GetParameter("Low Key");
     var highKey = GetParameter("High Key");
